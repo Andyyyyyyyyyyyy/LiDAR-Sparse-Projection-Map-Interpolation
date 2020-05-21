@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 
 img_dir ="./Images/"
 lidar_dir = "./LiDAR/"
-calib_file = "calibration.txt"
-ouput_dir ="./DenseReflectivityMap/"
+calib_dir = "./calib/"
+ouput_dir ="./DenseDepthMap/"
 
 if osp.exists(ouput_dir):
 	print('Output directory already exists:', ouput_dir)
@@ -22,18 +22,20 @@ else:
 	os.makedirs( ouput_dir );
 	print('Creating DenseIMG:', ouput_dir)
 
-
+#read files
 img_files = glob.glob(osp.join(img_dir, '*.png'))
 lidar_files = glob.glob(osp.join(lidar_dir, '*.bin'))
+calib_files = glob.glob(osp.join(calib_dir, '*.txt'))
 img_files.sort()
 lidar_files.sort()
+calib_files.sort()
 
 def read_calib_file(filepath):
     """Read in a calibration file and parse into a dictionary."""
     data = {}
 
     with open(filepath, 'r') as f:
-        for line in f.readlines():
+        for line in f.readlines()[:7]:
             key, value = line.split(':', 1)
             # The only non-float values in these files are dates, which
             # we don't care about anyway
@@ -44,34 +46,37 @@ def read_calib_file(filepath):
 
     return data
 
-# read calibration.txt 
-calib = read_calib_file(calib_file)
-R_rect_00 = np.zeros((4, 4))
-R_rect_00[:3,:3] = np.array(calib['R0_rect']).reshape(-1, 3)
-R_rect_00[3,3] = 1.
+for index in range(len(lidar_files)):
 
-P_rect_02 = np.zeros((4, 4))
-P_rect_02[:3, :] = np.array(calib['P2']).reshape(-1, 4)
-P_rect_02[3, 3] = 1.
-
-vel2cam0 = np.zeros((4, 4))
-vel2cam0[:3,:] = np.array(calib['Tr_velo_to_cam']).reshape(-1, 4)
-vel2cam0[3,3] = 1.
-
-# compute transform matrix 
-T_lidar_camera = np.dot(R_rect_00, vel2cam0)
-P_lidar_image = np.dot(P_rect_02, T_lidar_camera)
-
-for  i, lidar_file  in enumerate(lidar_files):
-
-    print(i,'Generating dense reflectivity image from:', osp.basename(lidar_file))
+    print(index,'Generating dense reflectivity image from:', osp.basename(lidar_files[index]))
     start_time = time.time()
-    
-    with open(lidar_file, 'r') as f:
-        pointcloud = np.fromfile(f, dtype=np.float32).reshape(-1, 4)
 
-    image = cv2.imread(img_files[i]) 
+    # read calibration files 
+    calib = read_calib_file(calib_files[index])
+    R_rect_00 = np.zeros((4, 4))
+    R_rect_00[:3,:3] = np.array(calib['R0_rect']).reshape(-1, 3)
+    R_rect_00[3,3] = 1.
+
+    P_rect_02 = np.zeros((4, 4))
+    P_rect_02[:3, :] = np.array(calib['P2']).reshape(-1, 4)
+    P_rect_02[3, 3] = 1.
+
+    vel2cam0 = np.zeros((4, 4))
+    vel2cam0[:3,:] = np.array(calib['Tr_velo_to_cam']).reshape(-1, 4)
+    vel2cam0[3,3] = 1.
+
+    # compute transform matrix 
+    T_lidar_camera = np.dot(R_rect_00, vel2cam0)
+    P_lidar_image = np.dot(P_rect_02, T_lidar_camera)
+    
+    # read images 
+    image = cv2.imread(img_files[index]) 
     h, w, _= image.shape
+    
+    with open(lidar_files[index], 'r') as f:
+        pointcloud = np.fromfile(f, dtype=np.float32).reshape(-1, 4)
+        
+    base = osp.splitext(osp.basename(lidar_files[index]))[0]
    
     pointcloud = pointcloud[np.logical_and((pointcloud[:, 1] < pointcloud[:, 0] - 0.27), (-pointcloud[:, 1] < pointcloud[:, 0] - 0.27))]   
     
@@ -98,9 +103,9 @@ for  i, lidar_file  in enumerate(lidar_files):
 
     # mask the result to the ROI
     mask = np.zeros((h, w))                                # initialize mask 
-    index = (rms != 0).argmax(axis=0)
+    ind = (rms != 0).argmax(axis=0)
     for i in range(w):
-        mask[index[i]:, i] = 1
+        mask[ind[i]:, i] = 1
 
     kernel = np.ones((2, 10), np.uint8)
     mask   = cv2.dilate(mask,kernel,iterations = 1)                         # by Dilation
@@ -109,10 +114,10 @@ for  i, lidar_file  in enumerate(lidar_files):
     rm  = mask*(255*rmd).astype(np.uint8)
     
     #Save
-    plt.imsave(ouput_dir+osp.splitext(osp.basename(lidar_file))[0]+".jpg", rm, cmap="jet")   
-#    cv2.imwrite(ouput_dir+osp.splitext(osp.basename(lidar_file))[0]+".jpg", rm)
+    plt.imsave(ouput_dir+base+".jpg", rm, cmap="jet")   
+#    cv2.imwrite(ouput_dir+base+".jpg", rm)
     
-    print("Saving as :",ouput_dir+osp.splitext(osp.basename(lidar_file))[0]+".jpg")
+    print("Saving as :",base+".jpg")
     end_time = time.time()
     print("Time Consuming :", end_time - start_time)
     print()
