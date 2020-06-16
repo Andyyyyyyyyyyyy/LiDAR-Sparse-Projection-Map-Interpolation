@@ -91,12 +91,12 @@ for index in range(len(lidar_files)):
 
     #sparse maps 
     rms = np.zeros((h, w))                        # reflectance map
-    rms[pixel[:, 1].astype(np.uint16), pixel[:, 0].astype(np.uint16)] = pixel[:, 3]   
+    rms[pixel[:, 1].astype(np.uint16), pixel[:, 0].astype(np.uint16)] = pixel[:, 2]   
 
 
-    # interpolation reflectance-map 
+    # interpolation depth-map 
     row, col = np.meshgrid(np.linspace(0, w-1, num=w), np.linspace(0, h-1, num=h))  
-    rmd = griddata(pixel[:, :2], pixel[:, 3], (row, col), method='linear')    #try 'nearest','linear'
+    rmd = griddata(pixel[:, :2], pixel[:, 2], (row, col), method='linear')    #try 'nearest','linear'
 
     # mask the result to the ROI
     mask = np.zeros((h, w))                                # initialize mask 
@@ -107,7 +107,7 @@ for index in range(len(lidar_files)):
     kernel = np.ones((2, 10), np.uint8)
     mask   = cv2.dilate(mask,kernel,iterations = 1)                         # by Dilation
     
-    ## mask the reflectance map
+    ## mask the depth map
     rm  = mask*(255*rmd).astype(np.uint8)
     
     #Save
