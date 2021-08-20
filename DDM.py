@@ -8,6 +8,10 @@ import cv2
 from scipy.interpolate import griddata
 import matplotlib.pyplot as plt
 
+#range
+min_range = 0
+max_range = 80
+
 img_dir ="./Images/"
 lidar_dir = "./LiDAR/"
 calib_dir = "./calib/"
@@ -90,17 +94,22 @@ for index in range(len(lidar_files)):
     pixel = pixel[ia,:]                                                     # [r c depth reflectance], 
 
     #sparse maps 
-    rms = np.zeros((h, w))                        # reflectance map
-    rms[pixel[:, 1].astype(np.uint16), pixel[:, 0].astype(np.uint16)] = pixel[:, 2]   
+    dms = np.zeros((h, w))                        # reflectance map
+    dms[pixel[:, 1].astype(np.uint16), pixel[:, 0].astype(np.uint16)] = pixel[:, 2]   
+
 
 
     # interpolation depth-map 
     row, col = np.meshgrid(np.linspace(0, w-1, num=w), np.linspace(0, h-1, num=h))  
-    rmd = griddata(pixel[:, :2], pixel[:, 2], (row, col), method='linear')    #try 'nearest','linear'
+    dmd = griddata(pixel[:, :2], pixel[:, 2], (row, col), method='linear')    #try 'nearest','linear'
 
+    dmd = (dmd - min_range) / (max_range - min_range)
+    dmd = np.where(dmd < 0, 0, dmd)
+    dmd = np.where(dmd > 1, 1, dmd)
+    
     # mask the result to the ROI
     mask = np.zeros((h, w))                                # initialize mask 
-    ind = (rms != 0).argmax(axis=0)
+    ind = (dms != 0).argmax(axis=0)
     for i in range(w):
         mask[ind[i]:, i] = 1
 
@@ -108,11 +117,11 @@ for index in range(len(lidar_files)):
     mask   = cv2.dilate(mask,kernel,iterations = 1)                         # by Dilation
     
     ## mask the depth map
-    rm  = mask*(255*rmd).astype(np.uint8)
+    dm  = mask*(255*dmd).astype(np.uint8)
     
     #Save
-    plt.imsave(ouput_dir+base+".jpg", rm, cmap="jet")   
-#    cv2.imwrite(ouput_dir+base+".jpg", rm)
+    plt.imsave(ouput_dir+base+".jpg", dm, cmap="jet")   
+#    cv2.imwrite(ouput_dir+base+".jpg", dm)
     
     print("Saving as :",base+".jpg")
     end_time = time.time()
